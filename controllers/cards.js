@@ -26,7 +26,7 @@ module.exports.createCard = ('/', (req, res, next) => {
       if (err._message === 'cards validation failed') {
         throw new InvalidData('Invalid Card-data');
       } else {
-        throw new ServerError ('Internal server error');
+        throw new ServerError('Internal server error');
       }
     })
     .catch(next);
@@ -48,15 +48,19 @@ module.exports.deleteCard = ((req, res, next) => {
           });
       } else {
         next(new Forbidden('Вы не можете удалять чужие карточки'));
+        // eslint-disable-next-line no-useless-return
         return;
       }
     })
     .catch((err) => {
       if (err.message === 'notValidId') {
         next(new NotFoundError('Нет пользователя с таким id'));
+        // eslint-disable-next-line no-useless-return
         return;
+        // eslint-disable-next-line no-else-return
       } else {
-        next(new ServerError ('Internal server error'));
+        next(new ServerError('Internal server error'));
+        // eslint-disable-next-line no-useless-return
         return;
       }
     })
