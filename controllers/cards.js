@@ -1,17 +1,22 @@
 const mongoose = require('mongoose');
 const Cards = require('../models/cards');
+const ServerError = require('../errors/server-error');
+const InvalidData = require('../errors/invalid-data');
+const Forbidden = require('../errors/forbidden');
+const NotFoundError = require('../errors/not-found-err');
 
-module.exports.getCards = ('/', (req, res) => {
+module.exports.getCards = ('/', (req, res, next) => {
   Cards.find({})
     .then((сards) => {
+      if (!сards) {
+        throw new ServerError('Server error');
+      }
       res.json({ data: сards });
     })
-    .catch(() => {
-      res.status(500).send({ message: 'Internal server error' });
-    });
+    .catch(next);
 });
 
-module.exports.createCard = ('/', (req, res) => {
+module.exports.createCard = ('/', (req, res, next) => {
   const { name, link } = req.body;
   Cards.create({ name, link, owner: req.user._id })
     .then((cards) => {
@@ -19,17 +24,18 @@ module.exports.createCard = ('/', (req, res) => {
     })
     .catch((err) => {
       if (err._message === 'cards validation failed') {
-        res.status(400).send({ message: 'Invalid Card-data' });
+        throw new InvalidData('Invalid Card-data');
       } else {
-        res.status(500).send({ message: 'Internal server error' });
+        throw new ServerError ('Internal server error');
       }
-    });
+    })
+    .catch(next);
 });
 
-module.exports.deleteCard = ((req, res) => {
+module.exports.deleteCard = ((req, res, next) => {
   const cardId = req.params.id;
   if (!mongoose.Types.ObjectId.isValid(cardId)) {
-    res.status(400).send({ message: 'Invalid id' });
+    next(new InvalidData('Invalid Id'));
     return;
   }
   Cards.findById(cardId)
@@ -41,14 +47,18 @@ module.exports.deleteCard = ((req, res) => {
             res.json({ data: cards });
           });
       } else {
-        res.status(403).send({ message: 'Вы не можете удалять чужие карточки' });
+        next(new Forbidden('Вы не можете удалять чужие карточки'));
+        return;
       }
     })
     .catch((err) => {
       if (err.message === 'notValidId') {
-        res.status(404).send({ message: 'Нет пользователя с таким id' });
+        next(new NotFoundError('Нет пользователя с таким id'));
+        return;
       } else {
-        res.status(500).send({ message: 'Internal server error' });
+        next(new ServerError ('Internal server error'));
+        return;
       }
-    });
+    })
+    .catch(next);
 });

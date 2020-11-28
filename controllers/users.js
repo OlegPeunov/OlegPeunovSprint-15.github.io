@@ -3,8 +3,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Users = require('../models/users');
+const NotFoundError = require('../errors/not-found-err');
+const InvalidData = require('../errors/invalid-data');
+const Conflict = require('../errors/conflict');
+const Unauthorized = require('../errors/unauthorized');
+const ServerError = require('../errors/server-error');
 
-module.exports.createUser = ('/', (req, res) => {
+module.exports.createUser = ('/', (req, res, next) => {
   const {
     name,
     about,
@@ -25,21 +30,24 @@ module.exports.createUser = ('/', (req, res) => {
       })
       .catch((err) => {
         if (err._message === 'user validation failed') {
-          res.status(400).send({ message: 'Invalid User-data' });
+          next(new InvalidData('Invalid User-data'));
           return;
         }
         if (err.name === 'MongoError' && err.code === 11000) {
-          res.status(409).send({ message: 'Пользователь с таким email уже существует' });
-          return;
+          throw new Conflict('Пользователь с таким email уже существует');
         }
         res.status(500).send({ message: 'Internal server error' });
-      }));
+      }))
+    .catch(next);
 });
 
-module.exports.login = (req, res) => {
+module.exports.login = (req, res, next) => {
   const { email, password } = req.body;
   return Users.findUserByCredentials(email, password)
     .then((user) => {
+      if (!user) {
+        throw new Unauthorized('Требуется аутентификация');
+      }
       const token = jwt.sign(
         { _id: user._id },
         NODE_ENV === 'production' ? JWT_SECRET : 'some-secret-key',
@@ -47,37 +55,32 @@ module.exports.login = (req, res) => {
       );
       res.send({ token });
     })
-    .catch((err) => {
-      res.status(401).send({ message: err.message });
-    });
+    .catch(next);
 };
 
-module.exports.getUsers = ('/', (req, res) => {
+module.exports.getUsers = ('/', (req, res, next) => {
   Users.find({})
     .then((users) => {
+      if (!users) {
+        throw new ServerError('Server error');
+      }
       res.json({ data: users });
     })
-    .catch(() => {
-      res.status(500).send({ message: 'Internal server error' });
-    });
+    .catch(next);
 });
 
-module.exports.getUserId = ('/', (req, res) => {
+module.exports.getUserId = ('/', (req, res, next) => {
   const userId = req.params.id;
   if (!mongoose.Types.ObjectId.isValid(userId)) {
-    res.status(400).send({ message: 'Invalid id' });
+    next(new InvalidData('Invalid Id'));
     return;
   }
   Users.findById(userId)
-    .orFail(new Error('notValidId'))
     .then((user) => {
+      if (!user) {
+        throw new NotFoundError('Нет пользователя с таким id');
+      }
       res.status(200).send({ data: user });
     })
-    .catch((err) => {
-      if (err.message === 'notValidId') {
-        res.status(404).send({ message: 'Нет пользователя с таким id' });
-        return;
-      }
-      res.status(500).send({ message: 'Internal server error' });
-    });
+    .catch(next);
 });
